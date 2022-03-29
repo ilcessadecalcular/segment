@@ -144,11 +144,13 @@ def train():
     #from models.twoD.unet import only_unet
     #model = only_unet(in_channels=hp.in_class, classes=hp.out_class).to(device)
 
-
-
-    from models.twoD_rnn.HRNetwithrnn2 import RNNSeg
+    from models.three_d.hrnet3d import Hrnet_3d
     from models.twoD_rnn.config import HRNet32
-    model = RNNSeg(HRNet32).to(device)
+    model = Hrnet_3d(HRNet32).to(device)
+
+    # from models.twoD_rnn.RNN_HRNet import RNNSeg
+    # from models.twoD_rnn.config import HRNet18
+    # model = RNNSeg(HRNet18).to(device)
 
 
 
@@ -158,7 +160,7 @@ def train():
     # scheduler = ReduceLROnPlateau(optimizer, 'min',factor=0.5, patience=20, verbose=True)
     #scheduler = StepLR(optimizer, step_size=hp.scheduer_step_size, gamma=hp.scheduer_gamma)
     # scheduler = CosineAnnealingLR(optimizer, T_max=50, eta_min=5e-6)
-    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0 = 25, eta_min=0.01*args.init_lr,T_mult=2)
+    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0 = 50, eta_min=0.01*args.init_lr,T_mult=2)
 
     if args.ckpt is not None:
         print("load model:", args.ckpt)

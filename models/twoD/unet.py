@@ -120,12 +120,25 @@ class only_unet(nn.Module):
         self.classes = classes
         self.unet = Unet(in_channels,classes)
     def forward(self,x):
-        b, _, d, h, w = x.shape
-        outputs = []
-        for i in range(d):
-            out = x[:, :, i, :, :]
-            out = self.unet(out)
-            outputs.append(out)
-        outputs = torch.stack(outputs).permute(1,2,0,3,4)
-        return outputs
+
+        x = torch.permute(x, (0, 2, 1, 3, 4))
+        # x:b,d,c,h,w
+
+        input = x[0, :, :, :, :]
+        # input:d,c,h,w
+        out = self.unet(input)
+
+        out = torch.permute(out, (1, 0, 2, 3))
+        real_out = out.unsqueeze(0)
+
+        return real_out
+
+        # b, _, d, h, w = x.shape
+        # outputs = []
+        # for i in range(d):
+        #     out = x[:, :, i, :, :]
+        #     out = self.unet(out)
+        #     outputs.append(out)
+        # outputs = torch.stack(outputs).permute(1,2,0,3,4)
+        # return outputs
 

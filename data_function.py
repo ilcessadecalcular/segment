@@ -128,7 +128,7 @@ class MedData_eval(torch.utils.data.Dataset):
 
     def transform(self):
         training_transform = Compose([
-        #CropOrPad((hp.crop_or_pad_size), padding_mode='reflect'),
+        CropOrPad((hp.crop_or_pad_size), padding_mode='reflect'),
         ZNormalization()
         ])
         return training_transform

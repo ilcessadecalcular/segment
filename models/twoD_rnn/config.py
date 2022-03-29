@@ -90,7 +90,7 @@ class HRNet18:
     class STAGE1:
         NUM_MODULES = 1
         NUM_BRANCHES = 1
-        NUM_BLOCKS = [3]
+        NUM_BLOCKS = [4]
         NUM_CHANNELS = [64]
         BLOCK = 'BOTTLENECK'
         FUSE_METHOD = 'SUM'
@@ -98,23 +98,23 @@ class HRNet18:
     class STAGE2:
         NUM_MODULES = 1
         NUM_BRANCHES = 2
-        NUM_BLOCKS = [3, 3]
+        NUM_BLOCKS = [4, 4]
         NUM_CHANNELS = [18, 36]
         BLOCK = 'BASIC'
         FUSE_METHOD = 'SUM'
 
     class STAGE3:
-        NUM_MODULES = 2
+        NUM_MODULES = 1
         NUM_BRANCHES = 3
-        NUM_BLOCKS = [3, 3, 3]
+        NUM_BLOCKS = [4, 4, 4]
         NUM_CHANNELS = [18, 36, 72]
         BLOCK = 'BASIC'
         FUSE_METHOD = 'SUM'
 
     class STAGE4:
-        NUM_MODULES = 2
+        NUM_MODULES = 1
         NUM_BRANCHES = 4
-        NUM_BLOCKS = [3, 3, 3, 3]
+        NUM_BLOCKS = [4, 4, 4, 4]
         NUM_CHANNELS = [18, 36, 72, 144]
         BLOCK = 'BASIC'
         FUSE_METHOD = 'SUM'

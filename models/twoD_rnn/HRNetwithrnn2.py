@@ -26,10 +26,10 @@ class BasicBlock(nn.Module):
     def __init__(self, inplanes, planes, stride=1, downsample=None):
         super(BasicBlock, self).__init__()
         self.conv1 = conv3x3(inplanes, planes, stride)
-        #self.bn1 = BatchNorm2d(planes, momentum=BN_MOMENTUM)
+        self.bn1 = BatchNorm2d(planes, momentum=BN_MOMENTUM)
         self.relu = nn.ReLU(inplace=relu_inplace)
         self.conv2 = conv3x3(planes, planes)
-        #self.bn2 = BatchNorm2d(planes, momentum=BN_MOMENTUM)
+        self.bn2 = BatchNorm2d(planes, momentum=BN_MOMENTUM)
         self.downsample = downsample
         self.stride = stride
 
@@ -37,11 +37,11 @@ class BasicBlock(nn.Module):
         residual = x
 
         out = self.conv1(x)
-        #out = self.bn1(out)
+        out = self.bn1(out)
         out = self.relu(out)
 
         out = self.conv2(out)
-        #out = self.bn2(out)
+        out = self.bn2(out)
 
         if self.downsample is not None:
             residual = self.downsample(x)
@@ -58,14 +58,14 @@ class Bottleneck(nn.Module):
     def __init__(self, inplanes, planes, stride=1, downsample=None):
         super(Bottleneck, self).__init__()
         self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
-        #self.bn1 = BatchNorm2d(planes, momentum=BN_MOMENTUM)
+        self.bn1 = BatchNorm2d(planes, momentum=BN_MOMENTUM)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride,
                                padding=1, bias=False)
-        #self.bn2 = BatchNorm2d(planes, momentum=BN_MOMENTUM)
+        self.bn2 = BatchNorm2d(planes, momentum=BN_MOMENTUM)
         self.conv3 = nn.Conv2d(planes, planes * self.expansion, kernel_size=1,
                                bias=False)
-        #self.bn3 = BatchNorm2d(planes * self.expansion,
-        #                       momentum=BN_MOMENTUM)
+        self.bn3 = BatchNorm2d(planes * self.expansion,
+                               momentum=BN_MOMENTUM)
         self.relu = nn.ReLU(inplace=relu_inplace)
         self.downsample = downsample
         self.stride = stride
@@ -478,20 +478,24 @@ class RNNSeg(nn.Module):
             num_feat*2, num_feat, num_blocks)
         self.fusion = nn.Conv2d(
             num_feat * 2, num_feat, 1, 1, 0, bias=True)
+        #self.ln1 = nn.LayerNorm([num_feat,64,64],elementwise_affine=False) 
         self.up = nn.Sequential(
             nn.ConvTranspose2d(num_feat,num_feat,kernel_size=2,stride=2),
             nn.Conv2d(num_feat,num_feat,3,1,1),
+            #nn.LayerNorm([num_feat,128,128]),
             #BatchNorm2d(num_feat,momentum=BN_MOMENTUM),
             nn.ReLU(inplace=False),
             nn.ConvTranspose2d(num_feat, num_feat, kernel_size=2, stride=2),
             nn.Conv2d(num_feat, num_feat, 3, 1, 1),
             #BatchNorm2d(num_feat, momentum=BN_MOMENTUM),
-            nn.ReLU(inplace=False)
-        )
-        self.relu = nn.ReLU(inplace=True)
+            #nn.LayerNorm([num_feat,256,256]),
+            nn.ReLU(inplace=False))
         self.conv1 = nn.Conv2d(num_feat, num_feat, 3, 1, 1)
+        #self.ln2 = nn.LayerNorm([num_feat,256,256],elementwise_affine=False)
         self.conv2 = nn.Conv2d(num_feat, num_feat, 3, 1, 1)
+        #self.ln3 = nn.LayerNorm([num_feat,256,256],elementwise_affine=False)
         self.last = nn.Conv2d(num_feat, 1, 3, 1, 1)
+        self.relu = nn.ReLU(inplace=False)
         #self.softmax = nn.Softmax(dim=1)
     def forward(self,x):
         # x是一系列切片 x:b,c,t,h,w
@@ -538,11 +542,28 @@ class RNNSeg(nn.Module):
             # upsampling given the backward and forward features
             out = torch.cat([outputs[i], feat_prop], dim=1)
             out = self.relu(self.fusion(out))
+            
+            #out = self.fusion(out)
+            #out = self.ln1(out)
+            #out = self.relu(out)
+            
+            
             out = self.up(out)
             out = self.relu(self.conv1(out))
             out = self.relu(self.conv2(out))
+            
+            #out = self.conv1(out)
+            #out = self.ln2(out)
+            #out = self.relu(out)
+            #out = self.conv2(out)
+            #out = self.ln3(out)
+            #out = self.relu(out)
+            
+            
             out = self.last(out)
             # base = self.img_upsample(lr_curr)
+            #value,index = torch.max(out,dim=1)
+            #print(value)
             # out += base
             outputs[i] = out
 
@@ -567,7 +588,13 @@ class ResidualBlocksWithInputConv(nn.Module):
         # a convolution used to match the channels of the residual blocks
         main.append(nn.Conv2d(in_channels, out_channels, 3, 1, 1, bias=True))
         main.append(nn.LeakyReLU(negative_slope=0.1, inplace=True))
-
+        
+        #main.append(nn.Conv2d(in_channels, out_channels, 3, 1, 1, bias=True))
+        #main.append(nn.LayerNorm([out_channels,64,64],elementwise_affine=False))
+        #main.append(nn.ReLU(inplace=True))
+        #main.append(nn.Conv2d(out_channels, out_channels, 3, 1, 1, bias=True))
+        #main.append(nn.LayerNorm([out_channels,64,64],elementwise_affine=False))
+        
         # residual blocks
         main.append(
             make_layer(

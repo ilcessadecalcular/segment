@@ -24,6 +24,7 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch,criterion):
         y = y.type(torch.FloatTensor).to(device)
         #print(x)
         predict = model(x)
+        #predict = torch.sigmoid(predict)
         
         
         loss = criterion(predict, y)
@@ -34,7 +35,7 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch,criterion):
 
         ys = y.detach()
         predicts = predict.detach()
-        #logits = outputss
+        #logits = predicts
         logits = torch.sigmoid(predicts)
         labels = logits.clone()
         labels[labels > 0.5] = 1
@@ -86,21 +87,23 @@ def evaluate(model, data_loader, device,epoch):
         #outputs = pad_tensor_back(pad_front, pad_back, pad_left, pad_right, pad_top, pad_bottom)
         #print(torch.max(outputs,dim=1))
         
-        x1 = x[:,:,:300,:,:]
-        predict1 = model(x1)
-        #del x1
-        x2 = x[:,:,300:,:,:]
-        predict2 = model(x2)
-        #del x2
-        #del x
-        
-        predicts = torch.cat((predict1,predict2),2)
-        #del outputs1
-        #del outputs2
-        
+        # x1 = x[:,:,:300,:,:]
+        # predict1 = model(x1)
+        # #del x1
+        # x2 = x[:,:,300:,:,:]
+        # predict2 = model(x2)
+        # #del x2
+        # #del x
+        #
+        # predicts = torch.cat((predict1,predict2),2)
+        # #del outputs1
+        # #del outputs2
+
+        predicts = model(x)
+
         # for metrics
         logits = torch.sigmoid(predicts)
-        #logits = outputs
+        #logits = predicts
         labels = logits.clone()
         labels[labels > 0.5] = 1
         labels[labels <= 0.5] = 0
