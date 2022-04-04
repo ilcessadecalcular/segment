@@ -104,7 +104,7 @@ class HRNet18:
         FUSE_METHOD = 'SUM'
 
     class STAGE3:
-        NUM_MODULES = 1
+        NUM_MODULES = 4
         NUM_BRANCHES = 3
         NUM_BLOCKS = [4, 4, 4]
         NUM_CHANNELS = [18, 36, 72]
@@ -112,7 +112,7 @@ class HRNet18:
         FUSE_METHOD = 'SUM'
 
     class STAGE4:
-        NUM_MODULES = 1
+        NUM_MODULES = 3
         NUM_BRANCHES = 4
         NUM_BLOCKS = [4, 4, 4, 4]
         NUM_CHANNELS = [18, 36, 72, 144]

@@ -745,6 +745,7 @@ def main():
     # only_twod=OnlyHRNetSeg(HRNet48).to('cuda:0')
     # output=only_twod(x)
     #output=model(x)
+    #####
 
     RNNSeggg=RNNSeg(HRNet32).cuda()
     label=RNNSeggg(x)

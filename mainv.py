@@ -117,8 +117,8 @@ def train():
         writer = SummaryWriter(args.output_dir)
 
 
-    #from models.three_d.unet3d import UNet3D
-    #model = UNet3D(in_channels=hp.in_class, out_channels=hp.out_class, init_features=32).to(device)
+    # from models.three_d.unet3d import UNet3D
+    # model = UNet3D(in_channels=hp.in_class, out_channels=hp.out_class, init_features=32).to(device)
 
     # from models.three_d.residual_unet3d import UNet
     # model = UNet(in_channels=hp.in_class, n_classes=hp.out_class, base_n_filter=2).to(device)
@@ -144,13 +144,17 @@ def train():
     #from models.twoD.unet import only_unet
     #model = only_unet(in_channels=hp.in_class, classes=hp.out_class).to(device)
 
-    from models.three_d.hrnet3d import Hrnet_3d
-    from models.twoD_rnn.config import HRNet32
-    model = Hrnet_3d(HRNet32).to(device)
+    # from models.three_d.hrnet3d import Hrnet_3d
+    # from models.twoD_rnn.config import HRNet32
+    # model = Hrnet_3d(HRNet32).to(device)
 
     # from models.twoD_rnn.RNN_HRNet import RNNSeg
     # from models.twoD_rnn.config import HRNet18
     # model = RNNSeg(HRNet18).to(device)
+
+    from models.twoD_rnn.HRNet_doubleRNN import RNNSeg
+    from models.twoD_rnn.config import HRNet32
+    model = RNNSeg(HRNet32).to(device)
 
 
 
@@ -195,7 +199,7 @@ def train():
     from loss_function import Binary_Loss,DiceLoss,BinaryDiceLoss,BCEFocalLoss
     #criterion = torch.nn.CrossEntropyLoss().to(device)
     criterion = Binary_Loss().to(device)
-    #criterion = BinaryDiceLoss().to(device)
+    # criterion = BinaryDiceLoss().to(device)
     #criterion = BCEFocalLoss().to(device)
     
 
