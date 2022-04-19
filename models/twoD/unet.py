@@ -83,21 +83,21 @@ class OutConv(nn.Module):
 
 
 class Unet(nn.Module):
-    def __init__(self, in_channels, classes):
+    def __init__(self, in_channels, classes,feat=32):
         super(Unet, self).__init__()
         self.n_channels = in_channels
         self.n_classes =  classes
-
-        self.inc = InConv(in_channels, 64)
-        self.down1 = Down(64, 128)
-        self.down2 = Down(128, 256)
-        self.down3 = Down(256, 512)
-        self.down4 = Down(512, 512)
-        self.up1 = Up(1024, 256)
-        self.up2 = Up(512, 128)
-        self.up3 = Up(256, 64)
-        self.up4 = Up(128, 64)
-        self.outc = OutConv(64, classes)
+        self.n_feat = feat
+        self.inc = InConv(in_channels, feat)
+        self.down1 = Down(feat, feat*2)
+        self.down2 = Down(feat*2, feat*4)
+        self.down3 = Down(feat*4, feat*8)
+        self.down4 = Down(feat*8, feat*8)
+        self.up1 = Up(feat*16, feat*4)
+        self.up2 = Up(feat*8, feat*2)
+        self.up3 = Up(feat*4, feat)
+        self.up4 = Up(feat*2, feat)
+        self.outc = OutConv(feat, classes)
         
 
     def forward(self, x):

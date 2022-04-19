@@ -62,7 +62,7 @@ class HRNet32:
         FUSE_METHOD = 'SUM'
 
     class STAGE3:
-        NUM_MODULES = 4
+        NUM_MODULES = 1
         NUM_BRANCHES = 3
         NUM_BLOCKS = [4, 4, 4]
         NUM_CHANNELS = [32, 64, 128]
@@ -70,7 +70,7 @@ class HRNet32:
         FUSE_METHOD = 'SUM'
 
     class STAGE4:
-        NUM_MODULES = 3
+        NUM_MODULES = 1
         NUM_BRANCHES = 4
         NUM_BLOCKS = [4, 4, 4, 4]
         NUM_CHANNELS = [32, 64, 128, 256]
@@ -90,6 +90,46 @@ class HRNet18:
     class STAGE1:
         NUM_MODULES = 1
         NUM_BRANCHES = 1
+        NUM_BLOCKS = [3]
+        NUM_CHANNELS = [64]
+        BLOCK = 'BOTTLENECK'
+        FUSE_METHOD = 'SUM'
+
+    class STAGE2:
+        NUM_MODULES = 1
+        NUM_BRANCHES = 2
+        NUM_BLOCKS = [3, 3]
+        NUM_CHANNELS = [18, 36]
+        BLOCK = 'BASIC'
+        FUSE_METHOD = 'SUM'
+
+    class STAGE3:
+        NUM_MODULES = 1
+        NUM_BRANCHES = 3
+        NUM_BLOCKS = [3, 3, 3]
+        NUM_CHANNELS = [18, 36, 72]
+        BLOCK = 'BASIC'
+        FUSE_METHOD = 'SUM'
+
+    class STAGE4:
+        NUM_MODULES = 1
+        NUM_BRANCHES = 4
+        NUM_BLOCKS = [3, 3, 3, 3]
+        NUM_CHANNELS = [18, 36, 72, 144]
+        BLOCK = 'BASIC'
+        FUSE_METHOD = 'SUM'
+
+    class DATASET:
+        NUM_CLASSES = 18
+
+
+# configs for HRNet16
+class HRNet16:
+    PRETRAINED = ''
+    FINAL_CONV_KERNEL = 1
+    class STAGE1:
+        NUM_MODULES = 1
+        NUM_BRANCHES = 1
         NUM_BLOCKS = [4]
         NUM_CHANNELS = [64]
         BLOCK = 'BOTTLENECK'
@@ -99,25 +139,67 @@ class HRNet18:
         NUM_MODULES = 1
         NUM_BRANCHES = 2
         NUM_BLOCKS = [4, 4]
-        NUM_CHANNELS = [18, 36]
+        NUM_CHANNELS = [16, 32]
         BLOCK = 'BASIC'
         FUSE_METHOD = 'SUM'
 
     class STAGE3:
-        NUM_MODULES = 4
+        NUM_MODULES = 1
         NUM_BRANCHES = 3
         NUM_BLOCKS = [4, 4, 4]
-        NUM_CHANNELS = [18, 36, 72]
+        NUM_CHANNELS = [16, 32, 64]
         BLOCK = 'BASIC'
         FUSE_METHOD = 'SUM'
 
     class STAGE4:
-        NUM_MODULES = 3
+        NUM_MODULES = 1
         NUM_BRANCHES = 4
         NUM_BLOCKS = [4, 4, 4, 4]
-        NUM_CHANNELS = [18, 36, 72, 144]
+        NUM_CHANNELS = [16, 32, 64, 128]
         BLOCK = 'BASIC'
         FUSE_METHOD = 'SUM'
 
     class DATASET:
-        NUM_CLASSES = 18
+        NUM_CLASSES = 16
+
+
+
+
+# configs for HRNet8
+class HRNet8:
+    PRETRAINED = ''
+    FINAL_CONV_KERNEL = 1
+    class STAGE1:
+        NUM_MODULES = 1
+        NUM_BRANCHES = 1
+        NUM_BLOCKS = [4]
+        NUM_CHANNELS = [64]
+        BLOCK = 'BOTTLENECK'
+        FUSE_METHOD = 'SUM'
+
+    class STAGE2:
+        NUM_MODULES = 1
+        NUM_BRANCHES = 2
+        NUM_BLOCKS = [4, 4]
+        NUM_CHANNELS = [8, 16]
+        BLOCK = 'BASIC'
+        FUSE_METHOD = 'SUM'
+
+    class STAGE3:
+        NUM_MODULES = 1
+        NUM_BRANCHES = 3
+        NUM_BLOCKS = [4, 4, 4]
+        NUM_CHANNELS = [8, 16, 32]
+        BLOCK = 'BASIC'
+        FUSE_METHOD = 'SUM'
+
+    class STAGE4:
+        NUM_MODULES = 1
+        NUM_BRANCHES = 4
+        NUM_BLOCKS = [4, 4, 4, 4]
+        NUM_CHANNELS = [8, 16, 32, 64]
+        BLOCK = 'BASIC'
+        FUSE_METHOD = 'SUM'
+
+    class DATASET:
+        NUM_CLASSES = 32

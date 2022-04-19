@@ -457,324 +457,135 @@ class HRNetSeg(nn.Module):
         return x
         
 
-class RNNSeg(nn.Module):
-    def __init__(self,config, mid_channels=8, num_blocks=30):
-        super(RNNSeg, self).__init__()
-        self.mid_channels=mid_channels
+    #
+    #
+    #
+    #
+    # def forward(self,x):
+    #     # 2d分割逻辑
+    #
+    #     # x是一张切片
+    #     return x
+
+
+# class RNNSeg(nn.Module):
+#     def __init__(self,num_feat):
+#         super(RNNSeg, self).__init__()
+#         self.num_feat=num_feat
+#         self.hrnet_seg=HRNetSeg(num_feat,)
+#         self.up = nn.Sequential(
+#             nn.Conv2d(num_feat, num_feat * 4, 3, 1, 1),
+#             nn.PixelShuffle(2),
+#             nn.Conv2d(num_feat, num_feat * 4, 3, 1, 1),
+#             nn.PixelShuffle(2)
+#         )
+#         self.relu = nn.ReLU(inplace=True)
+#         self.conv = nn.Conv2d(num_feat, num_feat, 3, 1, 1)
+#         self.last = nn.Conv2d(num_feat, out_feat, 3, 1, 1)
+#         self.softmax = nn.Softmax(dim=1)
+#     def forward(self,x):
+#         # x是一系列切片
+#         b,n,_,h,w=x.shape
+#         # x:[b,n,1,h,w]
+#         # 假定2d分割的特征通道数为d
+#         hidden_state=x.zeros_like(b,self.num_feat,h,w)
+#         outputs=[]
+#         for i in range(n):
+#             out=torch.cat([hidden_state,x[:,i,:,:,:]],dim=1)
+#             out=self.hrnet_seg(out)
+#             outputs.append(out)
+#             hidden_state=out
+#         real_outputs=[]
+#         for out in outputs:
+#             real_out=self.up(out)
+#             real_out = self.conv(self.relu(real_out))
+#             real_out = self.last(self.relu(real_out))
+#             real_out = self.softmax(real_out)
+#             real_outputs.append(real_out)
+#         pass
+#
+class OnlyHRNetSeg(nn.Module):
+    def __init__(self, config, in_feat=18, out_feat=1):
+        super(OnlyHRNetSeg, self).__init__()
+        # self.down=nn.Conv2d(in_feat,mid_feat,3,stride=4,padding=1)
         self.config = config()
-        self.num_blocks = num_blocks
-
-        # feature extraction module
-        self.feat_extract = HRNetSeg(config)
-
-        # propagation branches
-        self.backbone = nn.ModuleDict()
-        modules = ['backward_1', 'forward_1', 'backward_2', 'forward_2']
-        for i, module in enumerate(modules):
-            self.backbone[module] = ResidualBlocksWithInputConv(
-                (2 + i) * mid_channels, mid_channels, num_blocks)
-
-        # upsampling module
-        self.reconstruction = ResidualBlocksWithInputConv(
-            5 * mid_channels, mid_channels, 5)
-        self.up = nn.Sequential(
-            nn.ConvTranspose2d(mid_channels, mid_channels, kernel_size=2, stride=2),
-            nn.Conv2d(mid_channels, mid_channels, 3, 1, 1),
-            # BatchNorm2d(mid_channels,momentum=BN_MOMENTUM),
+        self.hrnet_seg=HRNetSeg(config)
+        self.up=nn.Sequential(
+            nn.ConvTranspose2d(in_feat, in_feat, kernel_size=2, stride=2),
+            nn.Conv2d(in_feat,in_feat, 3, 1, 1),
+            BatchNorm2d(in_feat, momentum=BN_MOMENTUM),
             nn.ReLU(inplace=False),
-            nn.ConvTranspose2d(mid_channels, mid_channels, kernel_size=2, stride=2),
-            nn.Conv2d(mid_channels, mid_channels, 3, 1, 1),
-            # BatchNorm2d(mid_channels, momentum=BN_MOMENTUM),
+            nn.ConvTranspose2d(in_feat, in_feat, kernel_size=2, stride=2),
+            nn.Conv2d(in_feat,in_feat, 3, 1, 1),
+            BatchNorm2d(in_feat, momentum=BN_MOMENTUM),
             nn.ReLU(inplace=False)
         )
-        self.relu = nn.ReLU(inplace=True)
-        self.conv1 = nn.Conv2d(mid_channels, mid_channels, 3, 1, 1)
-        self.conv2 = nn.Conv2d(mid_channels, mid_channels, 3, 1, 1)
-        self.last = nn.Conv2d(mid_channels, 1, 3, 1, 1)
+        
+        #self.tanh=nn.Tanh()
+        #self.sigmoid=nn.Sigmoid()
+        self.relu=nn.ReLU(inplace=False)
+        self.conv1=nn.Conv2d(in_feat, in_feat, 3, 1, 1)
+        self.bn1 = BatchNorm2d(in_feat, momentum=BN_MOMENTUM)
+        self.conv2=nn.Conv2d(in_feat, in_feat, 3, 1, 1)
+        self.bn2 = BatchNorm2d(in_feat, momentum=BN_MOMENTUM)
+        self.last=nn.Conv2d(in_feat, out_feat, 3, 1, 1)
+        #self.softmax=nn.Softmax(dim=1)
+    def forward(self,x):
+        #x:b,c,d,h,w
+        #x=torch.stack(x).permute(0,2,1,3,4)
+        x=torch.permute(x,(0,2,1,3,4))
+        #x:b,d,c,h,w
+        
+        input = x[0,:,:,:,:]
+        #input:d,c,h,w
+        out=self.hrnet_seg(input)
+        out=self.up(out)
+        out=self.conv1(out)
+        out=self.bn1(out)
+        out=self.relu(out)
+        out=self.conv2(out)
+        out=self.bn2(out)
+        out=self.relu(out)
+        out=self.last(out)
+        
+        out=torch.permute(out,(1,0,2,3))
+        real_out=out.unsqueeze(0)
+        
+        return real_out
 
-    def forward(self, x):
-        # x是一系列切片 x:n,c,t,h,w
-        n, c, t, h, w = x.size()
-        x_ = torch.permute(x, (0, 2, 1, 3, 4))
-        # x:n,t,c,h,w
-        input = x_[0, :, :, :, :]
-        feats = {}
-        # compute spatial features
-        feats_ = self.feat_extract(input)
-        #feats_ = t,c,h,w
-        feats_ = torch.permute(feats_, (1, 0, 2, 3))
-        feats_ = feats_.unsqueeze(0)
-        # feats_:n,c,t,h,w
-        feats['spatial'] = [feats_[:, :, i, :, :] for i in range(0, t)]
-        # feats['spatial']: t,  n,c,h,w
-        # feature propgation
-        for iter_ in [1, 2]:
-            for direction in ['backward', 'forward']:
-                module = f'{direction}_{iter_}'
+    def init_weights(self, pretrained='',):
+        #logger.info('=> init weights from normal distribution')
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.normal_(m.weight, std=0.01)
+            elif isinstance(m, BatchNorm2d_class):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+        if os.path.isfile(pretrained):
+            pretrained_dict = torch.load(pretrained)
+            logger.info('=> loading pretrained model {}'.format(pretrained))
+            model_dict = self.state_dict()              
+            pretrained_dict = {k: v for k, v in pretrained_dict.items()
+                               if k in model_dict.keys()}
+            for k, _ in pretrained_dict.items():
+                logger.info(
+                    '=> loading {} pretrained model {}'.format(k, pretrained))
+            model_dict.update(pretrained_dict)
+            self.load_state_dict(model_dict)
+            
+def get_seg_model(cfg, **kwargs):
+    model = OnlyHRNetSeg(cfg, **kwargs)
+    #model.init_weights(cfg.PRETRAINED)
 
-                feats[module] = []
-
-                # if direction == 'backward':
-                #     flows = flows_backward
-                # elif flows_forward is not None:
-                #     flows = flows_forward
-                # else:
-                #     flows = flows_backward.flip(1)
-
-                feats = self.propagate(feats, feats_, module)
-        return self.upsample(x, feats)
-
-
-    def propagate(self, feats, feats_, module_name):
-        """Propagate the latent features throughout the sequence.
-
-        Args:
-            feats dict(list[tensor]): Features from previous branches. Each
-                component is a list of tensors with shape (n, c, h, w).
-            flows (tensor): Optical flows with shape (n, t - 1, 2, h, w).
-            module_name (str): The name of the propgation branches. Can either
-                be 'backward_1', 'forward_1', 'backward_2', 'forward_2'.
-
-        Return:
-            dict(list[tensor]): A dictionary containing all the propagated
-                features. Each key in the dictionary corresponds to a
-                propagation branch, which is represented by a list of tensors.
-        """
-
-        n, c, t, h, w = feats_.shape
-
-        frame_idx = range(0, t)
-        #flow_idx = range(-1, t)
-        mapping_idx = list(range(0, len(feats['spatial'])))
-        mapping_idx += mapping_idx[::-1]
-
-        if 'backward' in module_name:
-            frame_idx = frame_idx[::-1]
-            #flow_idx = frame_idx
-
-        feat_prop = feats_.new_zeros(n, c, h, w)
-        for i, idx in enumerate(frame_idx):
-            feat_current = feats['spatial'][mapping_idx[idx]]
-            # if self.cpu_cache:
-            #     feat_current = feat_current.cuda()
-            #     feat_prop = feat_prop.cuda()
-            # # second-order deformable alignment
-            # if i > 0:
-            #     flow_n1 = flows[:, flow_idx[i], :, :, :]
-            #     if self.cpu_cache:
-            #         flow_n1 = flow_n1.cuda()
-            #
-            #     cond_n1 = flow_warp(feat_prop, flow_n1.permute(0, 2, 3, 1))
-            #
-            #     # initialize second-order features
-            #     feat_n2 = torch.zeros_like(feat_prop)
-            #     flow_n2 = torch.zeros_like(flow_n1)
-            #     cond_n2 = torch.zeros_like(cond_n1)
-            #
-            #     if i > 1:  # second-order features
-            #         feat_n2 = feats[module_name][-2]
-            #         if self.cpu_cache:
-            #             feat_n2 = feat_n2.cuda()
-            #
-            #         flow_n2 = flows[:, flow_idx[i - 1], :, :, :]
-            #         if self.cpu_cache:
-            #             flow_n2 = flow_n2.cuda()
-            #
-            #         flow_n2 = flow_n1 + flow_warp(flow_n2,
-            #                                       flow_n1.permute(0, 2, 3, 1))
-            #         cond_n2 = flow_warp(feat_n2, flow_n2.permute(0, 2, 3, 1))
-            #
-            #     # flow-guided deformable convolution
-            #     cond = torch.cat([cond_n1, feat_current, cond_n2], dim=1)
-            #     feat_prop = torch.cat([feat_prop, feat_n2], dim=1)
-            #     feat_prop = self.deform_align[module_name](feat_prop, cond,
-            #                                                flow_n1, flow_n2)
-
-            # concatenate and residual blocks
-            feat = [feat_current] + [
-                feats[k][idx]
-                for k in feats if k not in ['spatial', module_name]
-            ] + [feat_prop]
-
-            feat = torch.cat(feat, dim=1)
-            # feat_prop = feat_prop + self.backbone[module_name](feat)
-            feat_prop = self.backbone[module_name](feat)
-            feats[module_name].append(feat_prop)
-
-        if 'backward' in module_name:
-            feats[module_name] = feats[module_name][::-1]
-
-        return feats
-
-
-    def upsample(self, x, feats):
-        """Compute the output image given the features.
-
-        Args:
-            x (tensor): Input medical image sequence with
-                shape (n, c, t, h, w).
-            feats (dict): The features from the propgation branches.
-
-        Returns:
-            Tensor: Output HR sequence with shape (n, t, c, 4h, 4w).
-
-        """
-
-        outputs = []
-        num_outputs = len(feats['spatial'])
-
-        mapping_idx = list(range(0, num_outputs))
-        mapping_idx += mapping_idx[::-1]
-        # print(x.size(2))
-        for i in range(0, x.size(2)):
-            hr = [feats[k].pop(0) for k in feats if k != 'spatial']
-            hr.insert(0, feats['spatial'][mapping_idx[i]])
-            hr = torch.cat(hr, dim=1)
-            # hr:n,c,h,w
-            hr = self.reconstruction(hr)
-            hr = self.up(hr)
-            hr = self.relu(self.conv1(hr))
-            hr = self.relu(self.conv2(hr))
-            hr = self.last(hr)
-
-
-            outputs.append(hr)
-
-        return torch.stack(outputs, dim=2)
-
-class ResidualBlocksWithInputConv(nn.Module):
-    """Residual blocks with a convolution in front.
-
-    Args:
-        in_channels (int): Number of input channels of the first conv.
-        out_channels (int): Number of channels of the residual blocks.
-            Default: 64.
-        num_blocks (int): Number of residual blocks. Default: 30.
-    """
-
-    def __init__(self, in_channels, out_channels=32, num_blocks=30):
-        super().__init__()
-
-        main = []
-
-        # a convolution used to match the channels of the residual blocks
-        main.append(nn.Conv2d(in_channels, out_channels, 3, 1, 1, bias=True))
-        main.append(nn.LeakyReLU(negative_slope=0.1, inplace=True))
-
-        # residual blocks
-        main.append(
-            make_layer(
-                ResidualBlockNoBN, num_blocks, mid_channels=out_channels))
-
-        self.main = nn.Sequential(*main)
-
-    def forward(self, feat):
-        """
-        Forward function for ResidualBlocksWithInputConv.
-
-        Args:
-            feat (Tensor): Input feature with shape (n, in_channels, h, w)
-
-        Returns:
-            Tensor: Output feature with shape (n, out_channels, h, w)
-        """
-        return self.main(feat)
-
-def make_layer(block, num_blocks, **kwarg):
-    """Make layers by stacking the same blocks.
-
-    Args:
-        block (nn.module): nn.module class for basic block.
-        num_blocks (int): number of blocks.
-
-    Returns:
-        nn.Sequential: Stacked blocks in nn.Sequential.
-    """
-    layers = []
-    for _ in range(num_blocks):
-        layers.append(block(**kwarg))
-    return nn.Sequential(*layers)
-
-
-class ResidualBlockNoBN(nn.Module):
-    """Residual block without BN.
-
-    It has a style of:
-
-    ::
-
-        ---Conv-ReLU-Conv-+-
-         |________________|
-
-    Args:
-        mid_channels (int): Channel number of intermediate features.
-            Default: 64.
-        res_scale (float): Used to scale the residual before addition.
-            Default: 1.0.
-    """
-
-    def __init__(self, mid_channels=32, res_scale=1.0):
-        super().__init__()
-        self.res_scale = res_scale
-        self.conv1 = nn.Conv2d(mid_channels, mid_channels, 3, 1, 1, bias=True)
-        self.conv2 = nn.Conv2d(mid_channels, mid_channels, 3, 1, 1, bias=True)
-
-        self.relu = nn.ReLU(inplace=True)
-
-        self.ln1 = nn.LayerNorm([mid_channels, 64, 64], elementwise_affine=False)
-        self.ln2 = nn.LayerNorm([mid_channels, 64, 64], elementwise_affine=False)
-
-        # if res_scale < 1.0, use the default initialization, as in EDSR.
-        # if res_scale = 1.0, use scaled kaiming_init, as in MSRResNet.
-
-        #if res_scale == 1.0:
-        #    self.init_weights()
-
-    # def init_weights(self):
-    #     """Initialize weights for ResidualBlockNoBN.
-    #
-    #     Initialization methods like `kaiming_init` are for VGG-style
-    #     modules. For modules with residual paths, using smaller std is
-    #     better for stability and performance. We empirically use 0.1.
-    #     See more details in "ESRGAN: Enhanced Super-Resolution Generative
-    #     Adversarial Networks"
-    #     """
-    #
-    #     for m in [self.conv1, self.conv2]:
-    #         default_init_weights(m, 0.1)
-
-    def forward(self, x):
-        """Forward function.
-
-        Args:
-            x (Tensor): Input tensor with shape (n, c, h, w).
-
-        Returns:
-            Tensor: Forward results.
-        """
-
-        identity = x
-        # out = self.conv2(self.relu(self.conv1(x)))
-
-        out = self.conv1(x)
-        out = self.ln1(out)
-        out = self.relu(out)
-        out = self.conv2(out)
-        out = self.ln2(out)
-
-        return identity + out * self.res_scale
+    return model
 
 
 def main():
-    #x=torch.ones([1,1,60,256,256],dtype=torch.float32).cuda()
-    x = torch.ones(1, 1, 60, 256, 256)
-    #model = HRNetSeg(HRNet48).to('cuda:0')
-    # only_twod=OnlyHRNetSeg(HRNet48).to('cuda:0')
-    # output=only_twod(x)
-    #output=model(x)
-
-    RNNSeggg=RNNSeg(HRNet32)
-    label=RNNSeggg(x)
-    print(label.shape)
+    x=torch.ones([1,1,1,256,256],dtype=torch.float32).cuda()
+    #only_twod=OnlyHRNetSeg(HRNet48).to('cuda:0')
+    #output=only_twod(x)
+    model=HRNetSeg(HRNet48).to('cuda:0')
+    output=model(x)
+    print(output.shape)
 if __name__ == '__main__':
     main()

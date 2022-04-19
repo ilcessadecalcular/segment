@@ -586,12 +586,7 @@ class ResidualBlocksWithInputConv(nn.Module):
         # a convolution used to match the channels of the residual blocks
         main.append(nn.Conv2d(in_channels, out_channels, 3, 1, 1, bias=True))
         main.append(nn.LeakyReLU(negative_slope=0.1, inplace=True))
-        
-        #main.append(nn.Conv2d(in_channels, out_channels, 3, 1, 1, bias=True))
-        #main.append(nn.LayerNorm([out_channels,64,64],elementwise_affine=False))
-        #main.append(nn.ReLU(inplace=True))
-        #main.append(nn.Conv2d(out_channels, out_channels, 3, 1, 1, bias=True))
-        #main.append(nn.LayerNorm([out_channels,64,64],elementwise_affine=False))
+
         
         # residual blocks
         main.append(
@@ -654,7 +649,7 @@ class ResidualBlockNoBN(nn.Module):
         self.relu = nn.ReLU(inplace=True)
 
         self.ln1 = nn.LayerNorm([mid_channels,64,64],elementwise_affine=False)
-        self.ln2 = nn.LayerNorm([mid_channels, 64, 64], elementwise_affine=False)
+        self.ln2 = nn.LayerNorm([mid_channels,64,64], elementwise_affine=False)
         # if res_scale < 1.0, use the default initialization, as in EDSR.
         # if res_scale = 1.0, use scaled kaiming_init, as in MSRResNet.
 
@@ -685,13 +680,13 @@ class ResidualBlockNoBN(nn.Module):
         """
 
         identity = x
-        #out = self.conv2(self.relu(self.conv1(x)))
+        out = self.conv2(self.relu(self.conv1(x)))
 
-        out = self.conv1(x)
-        out = self.ln1(out)
-        out = self.relu(out)
-        out = self.conv2(out)
-        out = self.ln2(out)
+        # out = self.conv1(x)
+        # out = self.ln1(out)
+        # out = self.relu(out)
+        # out = self.conv2(out)
+        # out = self.ln2(out)
 
         return identity + out * self.res_scale
 

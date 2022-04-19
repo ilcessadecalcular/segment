@@ -24,6 +24,11 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau,StepLR,CosineAnnealingLR
 from utils.distributed_utils import init_distributed_mode, dist, cleanup, is_main_process, reduce_value
 from utils.train_eval_utils import train_one_epoch,evaluate
 from torch.optim.lr_scheduler import CosineAnnealingLR, CosineAnnealingWarmRestarts
+import random
+from thop import profile
+from ptflops import get_model_complexity_info
+
+
 
 source_train_dir = hp.source_train_dir
 label_train_dir = hp.label_train_dir
@@ -52,7 +57,8 @@ def parse_training_args(parser):
     training.add_argument('--epochs', type=int, default=hp.total_epochs, help='Number of total epochs to run')
     training.add_argument('--epochs-per-checkpoint', type=int, default=hp.epochs_per_checkpoint, help='Number of epochs per checkpoint')
     training.add_argument('--batch', type=int, default=hp.batch_size, help='batch-size')  
-    training.add_argument('--divide', type=int, default=hp.divide, help='divide-size')  
+    training.add_argument('--divide', type=int, default=hp.divide, help='divide-size')
+    # training.add_argument('--crop_size', type=int, default=hp.crop_size, help='crop-size')
     parser.add_argument(
         '-k',
         "--ckpt",
@@ -82,6 +88,18 @@ def parse_training_args(parser):
 
     return parser
 
+def seed_torch(seed=42):
+    seed = int(seed)
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = True
+    ###  improvement
+    torch.backends.cudnn.enabled = True
 
 
 def train():
@@ -92,11 +110,11 @@ def train():
 
     args = parser.parse_args()
 
+    seed_torch()
 
-
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.enabled = args.cudnn_enabled
-    torch.backends.cudnn.benchmark = args.cudnn_benchmark
+    # torch.backends.cudnn.deterministic = True
+    # torch.backends.cudnn.enabled = args.cudnn_enabled
+    # torch.backends.cudnn.benchmark = args.cudnn_benchmark
 
 
     from data_function import MedData_train,MedData_eval
@@ -141,21 +159,32 @@ def train():
     # from models.three_d.unetr import UNETR
     # model = UNETR(img_shape=(hp.crop_or_pad_size), input_dim=hp.in_class, output_dim=hp.out_class).to(device)
 
-    #from models.twoD.unet import only_unet
-    #model = only_unet(in_channels=hp.in_class, classes=hp.out_class).to(device)
+    # from models.twoD.unet import only_unet
+    # model = only_unet(in_channels=hp.in_class, classes=hp.out_class).to(device)
 
     # from models.three_d.hrnet3d import Hrnet_3d
-    # from models.twoD_rnn.config import HRNet32
-    # model = Hrnet_3d(HRNet32).to(device)
+    # from models.twoD_rnn.config import HRNet48
+    # model = Hrnet_3d(HRNet48).to(device)
 
-    # from models.twoD_rnn.RNN_HRNet import RNNSeg
-    # from models.twoD_rnn.config import HRNet18
-    # model = RNNSeg(HRNet18).to(device)
+    from models.twoD_rnn.OnlyHRNet import get_seg_model
+    from models.twoD_rnn.config import HRNet8
+    model = get_seg_model(HRNet8,in_feat=HRNet8.DATASET.NUM_CLASSES).to(device)
 
-    from models.twoD_rnn.HRNet_doubleRNN import RNNSeg
-    from models.twoD_rnn.config import HRNet32
-    model = RNNSeg(HRNet32).to(device)
+    # from models.twoD_rnn.RNN_HRNet2 import RNNSeg
+    # from models.twoD_rnn.config import HRNet8
+    # model = RNNSeg(HRNet8,num_feat=HRNet8.DATASET.NUM_CLASSES).to(device)
 
+    # from models.twoD_rnn.HRNet_doubleRNN import RNNSeg
+    # from models.twoD_rnn.config import HRNet8
+    # model = RNNSeg(HRNet8).to(device)
+
+    if rank == 0:
+        flops, params = get_model_complexity_info(model,(1,hp.crop_size,256,256))
+        print('Flops:' + flops)
+        print('Params:' + params)
+
+    # flops, params = profile(model, inputs=(40,256,256))
+    # print(flops,params)
 
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.init_lr)
@@ -213,12 +242,12 @@ def train():
     train_batch_sampler = torch.utils.data.BatchSampler(
         train_sampler, args.batch, drop_last=True)
 
-    nw = min([os.cpu_count(), args.batch if args.batch > 1 else 0, 8])  # number of workers
-    if rank == 0:
-        print('Using {} dataloader workers every process'.format(nw))
+    # nw = min([os.cpu_count(), args.batch if args.batch > 1 else 0, 8])  # number of workers
+    # if rank == 0:
+    #     print('Using {} dataloader workers every process'.format(nw))
 
     train_loader = DataLoader(train_dataset.training_set,
-                            num_workers=nw,
+                            # num_workers=nw,
                             pin_memory=True,
                             batch_sampler=train_batch_sampler
                             )
@@ -227,7 +256,7 @@ def train():
                             batch_size=1,
                             sampler=eval_sampler,
                             pin_memory=True,
-                            num_workers=nw
+                            # num_workers=nw
                             )
 
     epochs = args.epochs - elapsed_epochs
@@ -248,25 +277,35 @@ def train():
                                     data_loader=train_loader,
                                     device=device,
                                     epoch=epoch,
-                                    criterion=criterion)
+                                    criterion=criterion,
+                                    crop_size=hp.crop_size
+                                    )
         scheduler.step()
 
-        dice = evaluate(model=model,
-                                                               data_loader=eval_loader,
-                                                               device=device,
-                                                               epoch=epoch
-                                                               )
+        eval_dice = evaluate(model=model,
+                        data_loader=eval_loader,
+                        device=device,
+                        epoch=epoch
+                        )
         torch.cuda.empty_cache()
             ## log
         if rank == 0:
-            print("loss:" + str(mean_loss))
+            print("mean_loss:" + str(mean_loss))
             print('lr:' + str(scheduler._last_lr[0]))
-            print('dice' + str(dice))
+            print('eval_dice' + str(eval_dice))
             writer.add_scalar('Training/Loss', mean_loss,epoch)
             writer.add_scalar('Training/dice', train_dice,epoch)
+            # writer.add_scalar('Training/hd95', train_hd95, epoch)
+            # writer.add_scalar('Training/precision', train_precision, epoch)
+            # writer.add_scalar('Training/recall', train_recall, epoch)
+            # writer.add_scalar('Training/asd', train_asd, epoch)
             #writer.add_scalar('Eval/false_positive_rate', false_positive_rate,epoch)
             #writer.add_scalar('Eval/false_negtive_rate', false_negtive_rate,epoch)
-            writer.add_scalar('Eval/dice', dice,epoch)
+            writer.add_scalar('Eval/dice', eval_dice,epoch)
+            # writer.add_scalar('Eval/hd95', eval_hd95, epoch)
+            # writer.add_scalar('Eval/precision', eval_precision, epoch)
+            # writer.add_scalar('Eval/recall', eval_recall, epoch)
+            # writer.add_scalar('Eval/asd', eval_asd, epoch)
 
 
         # Store latest checkpoint in each epoch

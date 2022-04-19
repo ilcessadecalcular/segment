@@ -458,189 +458,98 @@ class HRNetSeg(nn.Module):
         
 
 class RNNSeg(nn.Module):
-    def __init__(self,config, mid_channels=8, num_blocks=30):
+    def __init__(self,config, num_feat=18, num_blocks=10):
         super(RNNSeg, self).__init__()
-        self.mid_channels=mid_channels
+        self.num_feat=num_feat
         self.config = config()
+        self.hrnet_seg=HRNetSeg(config)
         self.num_blocks = num_blocks
-
-        # feature extraction module
-        self.feat_extract = HRNetSeg(config)
-
-        # propagation branches
-        self.backbone = nn.ModuleDict()
-        modules = ['backward_1', 'forward_1', 'backward_2', 'forward_2']
-        for i, module in enumerate(modules):
-            self.backbone[module] = ResidualBlocksWithInputConv(
-                (2 + i) * mid_channels, mid_channels, num_blocks)
-
-        # upsampling module
-        self.reconstruction = ResidualBlocksWithInputConv(
-            5 * mid_channels, mid_channels, 5)
+        self.backward_resblocks = ResidualBlocksWithInputConv(
+            num_feat*2, num_feat, num_blocks)
+        self.forward_resblocks = ResidualBlocksWithInputConv(
+            num_feat*2, num_feat, num_blocks)
+        self.fusion = nn.Conv2d(
+            num_feat * 3, num_feat, 1, 1, 0, bias=True)
         self.up = nn.Sequential(
-            nn.ConvTranspose2d(mid_channels, mid_channels, kernel_size=2, stride=2),
-            nn.Conv2d(mid_channels, mid_channels, 3, 1, 1),
-            # BatchNorm2d(mid_channels,momentum=BN_MOMENTUM),
+            nn.ConvTranspose2d(num_feat,num_feat,kernel_size=2,stride=2),
+            nn.Conv2d(num_feat,num_feat,3,1,1),
+            #nn.LayerNorm([num_feat,128,128]),
+            BatchNorm2d(num_feat,momentum=BN_MOMENTUM),
             nn.ReLU(inplace=False),
-            nn.ConvTranspose2d(mid_channels, mid_channels, kernel_size=2, stride=2),
-            nn.Conv2d(mid_channels, mid_channels, 3, 1, 1),
-            # BatchNorm2d(mid_channels, momentum=BN_MOMENTUM),
-            nn.ReLU(inplace=False)
-        )
-        self.relu = nn.ReLU(inplace=True)
-        self.conv1 = nn.Conv2d(mid_channels, mid_channels, 3, 1, 1)
-        self.conv2 = nn.Conv2d(mid_channels, mid_channels, 3, 1, 1)
-        self.last = nn.Conv2d(mid_channels, 1, 3, 1, 1)
+            nn.ConvTranspose2d(num_feat, num_feat, kernel_size=2, stride=2),
+            nn.Conv2d(num_feat, num_feat, 3, 1, 1),
+            BatchNorm2d(num_feat, momentum=BN_MOMENTUM),
+            #nn.LayerNorm([num_feat,256,256]),
+            nn.ReLU(inplace=False))
+        self.conv1 = nn.Conv2d(num_feat, num_feat, 3, 1, 1)
+        self.bn1 = BatchNorm2d(num_feat,momentum=BN_MOMENTUM)
+        self.bn2 = BatchNorm2d(num_feat, momentum=BN_MOMENTUM)
+        self.conv2 = nn.Conv2d(num_feat, num_feat, 3, 1, 1)
+        self.last = nn.Conv2d(num_feat, 1, 3, 1, 1)
+        self.relu = nn.ReLU(inplace=False)
+    def forward(self,x):
+        # x是一系列切片 x:b,c,t,h,w
+        x = torch.permute(x,(0,2,1,3,4))
+        #x:b,t,c,h,w
+        input = x[0,:,:,:,:]
+        mid_out = self.hrnet_seg(input)
 
-    def forward(self, x):
-        # x是一系列切片 x:n,c,t,h,w
-        n, c, t, h, w = x.size()
-        x_ = torch.permute(x, (0, 2, 1, 3, 4))
-        # x:n,t,c,h,w
-        input = x_[0, :, :, :, :]
-        feats = {}
-        # compute spatial features
-        feats_ = self.feat_extract(input)
-        #feats_ = t,c,h,w
-        feats_ = torch.permute(feats_, (1, 0, 2, 3))
-        feats_ = feats_.unsqueeze(0)
-        # feats_:n,c,t,h,w
-        feats['spatial'] = [feats_[:, :, i, :, :] for i in range(0, t)]
-        # feats['spatial']: t,  n,c,h,w
-        # feature propgation
-        for iter_ in [1, 2]:
-            for direction in ['backward', 'forward']:
-                module = f'{direction}_{iter_}'
+        # mid_out = self.up(mid_out)
 
-                feats[module] = []
-
-                # if direction == 'backward':
-                #     flows = flows_backward
-                # elif flows_forward is not None:
-                #     flows = flows_forward
-                # else:
-                #     flows = flows_backward.flip(1)
-
-                feats = self.propagate(feats, feats_, module)
-        return self.upsample(x, feats)
-
-
-    def propagate(self, feats, feats_, module_name):
-        """Propagate the latent features throughout the sequence.
-
-        Args:
-            feats dict(list[tensor]): Features from previous branches. Each
-                component is a list of tensors with shape (n, c, h, w).
-            flows (tensor): Optical flows with shape (n, t - 1, 2, h, w).
-            module_name (str): The name of the propgation branches. Can either
-                be 'backward_1', 'forward_1', 'backward_2', 'forward_2'.
-
-        Return:
-            dict(list[tensor]): A dictionary containing all the propagated
-                features. Each key in the dictionary corresponds to a
-                propagation branch, which is represented by a list of tensors.
-        """
-
-        n, c, t, h, w = feats_.shape
-
-        frame_idx = range(0, t)
-        #flow_idx = range(-1, t)
-        mapping_idx = list(range(0, len(feats['spatial'])))
-        mapping_idx += mapping_idx[::-1]
-
-        if 'backward' in module_name:
-            frame_idx = frame_idx[::-1]
-            #flow_idx = frame_idx
-
-        feat_prop = feats_.new_zeros(n, c, h, w)
-        for i, idx in enumerate(frame_idx):
-            feat_current = feats['spatial'][mapping_idx[idx]]
-            # if self.cpu_cache:
-            #     feat_current = feat_current.cuda()
-            #     feat_prop = feat_prop.cuda()
-            # # second-order deformable alignment
-            # if i > 0:
-            #     flow_n1 = flows[:, flow_idx[i], :, :, :]
-            #     if self.cpu_cache:
-            #         flow_n1 = flow_n1.cuda()
-            #
-            #     cond_n1 = flow_warp(feat_prop, flow_n1.permute(0, 2, 3, 1))
-            #
-            #     # initialize second-order features
-            #     feat_n2 = torch.zeros_like(feat_prop)
-            #     flow_n2 = torch.zeros_like(flow_n1)
-            #     cond_n2 = torch.zeros_like(cond_n1)
-            #
-            #     if i > 1:  # second-order features
-            #         feat_n2 = feats[module_name][-2]
-            #         if self.cpu_cache:
-            #             feat_n2 = feat_n2.cuda()
-            #
-            #         flow_n2 = flows[:, flow_idx[i - 1], :, :, :]
-            #         if self.cpu_cache:
-            #             flow_n2 = flow_n2.cuda()
-            #
-            #         flow_n2 = flow_n1 + flow_warp(flow_n2,
-            #                                       flow_n1.permute(0, 2, 3, 1))
-            #         cond_n2 = flow_warp(feat_n2, flow_n2.permute(0, 2, 3, 1))
-            #
-            #     # flow-guided deformable convolution
-            #     cond = torch.cat([cond_n1, feat_current, cond_n2], dim=1)
-            #     feat_prop = torch.cat([feat_prop, feat_n2], dim=1)
-            #     feat_prop = self.deform_align[module_name](feat_prop, cond,
-            #                                                flow_n1, flow_n2)
-
-            # concatenate and residual blocks
-            feat = [feat_current] + [
-                feats[k][idx]
-                for k in feats if k not in ['spatial', module_name]
-            ] + [feat_prop]
-
-            feat = torch.cat(feat, dim=1)
-            # feat_prop = feat_prop + self.backbone[module_name](feat)
-            feat_prop = self.backbone[module_name](feat)
-            feats[module_name].append(feat_prop)
-
-        if 'backward' in module_name:
-            feats[module_name] = feats[module_name][::-1]
-
-        return feats
-
-
-    def upsample(self, x, feats):
-        """Compute the output image given the features.
-
-        Args:
-            x (tensor): Input medical image sequence with
-                shape (n, c, t, h, w).
-            feats (dict): The features from the propgation branches.
-
-        Returns:
-            Tensor: Output HR sequence with shape (n, t, c, 4h, 4w).
-
-        """
-
+        mid_out = torch.permute(mid_out,(1,0,2,3))
+        mid_out = mid_out.unsqueeze(0)
+        #print(mid_out.shape)
+        #这里就把维度变回来  b,c,t,h,w
+        b, c, t, h, w = mid_out.shape
         outputs = []
-        num_outputs = len(feats['spatial'])
+        mid_output = []
+        feat_prop = mid_out.new_zeros(b, c, h, w)
+        #output = torch.ones(b, c, h, w)
+        for i in range(t - 1, -1, -1):
+            #if i < t - 1:  # no warping required for the last timestep
+                #feat_prop = mid_out[:, :, i+1, :, :]
+                #out:b,c,t,h,w
+                #feat_prop = flow_warp(feat_prop, flow.permute(0, 2, 3, 1))
 
-        mapping_idx = list(range(0, num_outputs))
-        mapping_idx += mapping_idx[::-1]
-        # print(x.size(2))
-        for i in range(0, x.size(2)):
-            hr = [feats[k].pop(0) for k in feats if k != 'spatial']
-            hr.insert(0, feats['spatial'][mapping_idx[i]])
-            hr = torch.cat(hr, dim=1)
-            # hr:n,c,h,w
-            hr = self.reconstruction(hr)
-            hr = self.up(hr)
-            hr = self.relu(self.conv1(hr))
-            hr = self.relu(self.conv2(hr))
-            hr = self.last(hr)
+            feat_prop = torch.cat([mid_out[:, :, i, :, :], feat_prop], dim=1)
+            feat_prop = self.backward_resblocks(feat_prop)
 
+            outputs.append(feat_prop)
+        outputs = outputs[::-1]
 
-            outputs.append(hr)
+        # forward-time propagation and upsampling
+        feat_prop = torch.zeros_like(feat_prop)
+        for i in range(0, t):
+            #print(mid_out.shape)
+            output_curr = mid_out[:, :, i, :, :]
+            # out:b,c,t,h,w
+            #if i > 0:  # no warping required for the first timestep
+            #     if flows_forward is not None:
+            #         flow = flows_forward[:, i - 1, :, :, :]
+            #     else:
+            #         flow = flows_backward[:, -i, :, :, :]
+                 #feat_prop = mid_out[:, :, i-1, :, :]
 
-        return torch.stack(outputs, dim=2)
+            #forward backward fenkai
+            feat_prop = torch.cat([output_curr, feat_prop], dim=1)
+            feat_prop = self.forward_resblocks(feat_prop)
+
+            # upsampling given the backward and forward features
+            out = torch.cat([outputs[i], feat_prop, output_curr], dim=1)
+            out = self.relu(self.fusion(out))
+            mid_output.append(out)
+        fianl_out = torch.stack(mid_output,dim=1)
+        fianl_out = fianl_out[0,:,:,:,:]
+        fianl_out = self.up(fianl_out)
+        fianl_out = self.relu(self.bn1(self.conv1(fianl_out)))
+        fianl_out = self.relu(self.bn2(self.conv2(fianl_out)))
+        fianl_out = self.last(fianl_out)
+
+        fianl_out = torch.permute(fianl_out,(1,0,2,3))
+        real_out = fianl_out.unsqueeze(0)
+
+        return real_out
+
 
 class ResidualBlocksWithInputConv(nn.Module):
     """Residual blocks with a convolution in front.
@@ -652,7 +561,7 @@ class ResidualBlocksWithInputConv(nn.Module):
         num_blocks (int): Number of residual blocks. Default: 30.
     """
 
-    def __init__(self, in_channels, out_channels=32, num_blocks=30):
+    def __init__(self, in_channels, out_channels=32, num_blocks=10):
         super().__init__()
 
         main = []
@@ -661,6 +570,7 @@ class ResidualBlocksWithInputConv(nn.Module):
         main.append(nn.Conv2d(in_channels, out_channels, 3, 1, 1, bias=True))
         main.append(nn.LeakyReLU(negative_slope=0.1, inplace=True))
 
+        
         # residual blocks
         main.append(
             make_layer(
@@ -721,9 +631,8 @@ class ResidualBlockNoBN(nn.Module):
 
         self.relu = nn.ReLU(inplace=True)
 
-        self.ln1 = nn.LayerNorm([mid_channels, 64, 64], elementwise_affine=False)
-        self.ln2 = nn.LayerNorm([mid_channels, 64, 64], elementwise_affine=False)
-
+        # self.ln1 = nn.LayerNorm([mid_channels,64,64],elementwise_affine=False)
+        # self.ln2 = nn.LayerNorm([mid_channels, 64, 64], elementwise_affine=False)
         # if res_scale < 1.0, use the default initialization, as in EDSR.
         # if res_scale = 1.0, use scaled kaiming_init, as in MSRResNet.
 
@@ -754,15 +663,57 @@ class ResidualBlockNoBN(nn.Module):
         """
 
         identity = x
-        # out = self.conv2(self.relu(self.conv1(x)))
+        out = self.conv2(self.relu(self.conv1(x)))
 
-        out = self.conv1(x)
-        out = self.ln1(out)
-        out = self.relu(out)
-        out = self.conv2(out)
-        out = self.ln2(out)
+        # out = self.conv1(x)
+        # out = self.ln1(out)
+        # out = self.relu(out)
+        # out = self.conv2(out)
+        # out = self.ln2(out)
 
         return identity + out * self.res_scale
+
+# def default_init_weights(module, scale=1):
+#     """Initialize network weights.
+#
+#     Args:
+#         modules (nn.Module): Modules to be initialized.
+#         scale (float): Scale initialized weights, especially for residual
+#             blocks.
+#     """
+#     for m in module.modules():
+#         if isinstance(m, nn.Conv2d):
+#             kaiming_init(m, a=0, mode='fan_in', bias=0)
+#             m.weight.data *= scale
+#         elif isinstance(m, nn.Linear):
+#             kaiming_init(m, a=0, mode='fan_in', bias=0)
+#             m.weight.data *= scale
+#         elif isinstance(m, _BatchNorm):
+#             constant_init(m.weight, val=1, bias=0)
+
+def kaiming_init(module,
+                 a=0,
+                 mode='fan_out',
+                 nonlinearity='relu',
+                 bias=0,
+                 distribution='normal'):
+    assert distribution in ['uniform', 'normal']
+    if hasattr(module, 'weight') and module.weight is not None:
+        if distribution == 'uniform':
+            nn.init.kaiming_uniform_(
+                module.weight, a=a, mode=mode, nonlinearity=nonlinearity)
+        else:
+            nn.init.kaiming_normal_(
+                module.weight, a=a, mode=mode, nonlinearity=nonlinearity)
+    if hasattr(module, 'bias') and module.bias is not None:
+        nn.init.constant_(module.bias, bias)
+
+def constant_init(module, val, bias=0):
+    if hasattr(module, 'weight') and module.weight is not None:
+        nn.init.constant_(module.weight, val)
+    if hasattr(module, 'bias') and module.bias is not None:
+        nn.init.constant_(module.bias, bias)
+
 
 
 def main():
@@ -772,8 +723,9 @@ def main():
     # only_twod=OnlyHRNetSeg(HRNet48).to('cuda:0')
     # output=only_twod(x)
     #output=model(x)
+    #####
 
-    RNNSeggg=RNNSeg(HRNet32)
+    RNNSeggg=RNNSeg(HRNet32).cuda()
     label=RNNSeggg(x)
     print(label.shape)
 if __name__ == '__main__':

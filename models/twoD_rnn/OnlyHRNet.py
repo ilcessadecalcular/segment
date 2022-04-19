@@ -505,7 +505,7 @@ class HRNetSeg(nn.Module):
 #         pass
 #
 class OnlyHRNetSeg(nn.Module):
-    def __init__(self, config, in_feat=32, out_feat=1):
+    def __init__(self, config, in_feat=18, out_feat=1):
         super(OnlyHRNetSeg, self).__init__()
         # self.down=nn.Conv2d(in_feat,mid_feat,3,stride=4,padding=1)
         self.config = config()
