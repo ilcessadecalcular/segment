@@ -7,14 +7,14 @@ class hparams:
     shuffle = True
     workers=0
     train_or_test = 'train'
-    output_dir = 'logs/onlyhrnet85'
+    output_dir = 'logs/hrnetrnn84'
     aug = None
     latest_checkpoint_file = 'checkpoint_latest.pt'
     total_epochs = 150
     epochs_per_checkpoint = 10
     batch_size = 1
     ckpt = None
-    init_lr = 0.001
+    init_lr = 0.0002
     scheduer_step_size = 20
     scheduer_gamma = 0.8
     debug = False
@@ -46,5 +46,12 @@ class hparams:
 
     source_test_dir = 'test/image'
     label_test_dir = 'test/label'
+    model_test_dir = 'logs/hrnetrnn83'
+    latest_checkpoint_file = 'checkpoint_latest.pt'
+
+
 
     output_dir_test = 'results/your_program_name'
+
+
+

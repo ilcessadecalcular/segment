@@ -24,13 +24,15 @@ def conv3x3(in_planes, out_planes, stride=1):
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, inplanes, planes, stride=1, downsample=None):
+    def __init__(self, inplanes, planes, size,stride=1, downsample=None):
         super(BasicBlock, self).__init__()
         self.conv1 = conv3x3(inplanes, planes, stride)
-        self.bn1 = BatchNorm2d(planes, momentum=BN_MOMENTUM)
+        self.ln1 = nn.LayerNorm([planes,8 * (2** (3 - size)),8 * (2** (3 - size))],elementwise_affine=False)
+        # self.bn1 = BatchNorm2d(planes, momentum=BN_MOMENTUM)
         self.relu = nn.ReLU(inplace=relu_inplace)
         self.conv2 = conv3x3(planes, planes)
-        self.bn2 = BatchNorm2d(planes, momentum=BN_MOMENTUM)
+        self.ln2 = nn.LayerNorm([planes,8 * (2** (3 - size)),8 * (2** (3 - size))], elementwise_affine=False)
+        # self.bn2 = BatchNorm2d(planes, momentum=BN_MOMENTUM)
         self.downsample = downsample
         self.stride = stride
 
@@ -38,11 +40,13 @@ class BasicBlock(nn.Module):
         residual = x
 
         out = self.conv1(x)
-        out = self.bn1(out)
+        out = self.ln1(out)
+        # out = self.bn1(out)
         out = self.relu(out)
 
         out = self.conv2(out)
-        out = self.bn2(out)
+        out = self.ln2(out)
+        # out = self.bn2(out)
 
         if self.downsample is not None:
             residual = self.downsample(x)
@@ -56,17 +60,20 @@ class BasicBlock(nn.Module):
 class Bottleneck(nn.Module):
     expansion = 4
 
-    def __init__(self, inplanes, planes, stride=1, downsample=None):
+    def __init__(self, inplanes, planes, size, stride=1, downsample=None):
         super(Bottleneck, self).__init__()
         self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
-        self.bn1 = BatchNorm2d(planes, momentum=BN_MOMENTUM)
+        self.ln1 = nn.LayerNorm([planes, 8 * (2** (3 - size)),8 * (2** (3 - size))], elementwise_affine=False)
+        # self.bn1 = BatchNorm2d(planes, momentum=BN_MOMENTUM)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride,
                                padding=1, bias=False)
-        self.bn2 = BatchNorm2d(planes, momentum=BN_MOMENTUM)
+        self.ln2 = nn.LayerNorm([planes, 8 * (2** (3 - size)), 8 * (2** (3 - size))], elementwise_affine=False)
+        # self.bn2 = BatchNorm2d(planes, momentum=BN_MOMENTUM)
         self.conv3 = nn.Conv2d(planes, planes * self.expansion, kernel_size=1,
                                bias=False)
-        self.bn3 = BatchNorm2d(planes * self.expansion,
-                               momentum=BN_MOMENTUM)
+        self.ln3 = nn.LayerNorm([planes * self.expansion, 8 * (2** (3 - size)), 8 * (2** (3 - size))], elementwise_affine=False)
+        # self.bn3 = BatchNorm2d(planes * self.expansion,
+        #                        momentum=BN_MOMENTUM)
         self.relu = nn.ReLU(inplace=relu_inplace)
         self.downsample = downsample
         self.stride = stride
@@ -75,15 +82,18 @@ class Bottleneck(nn.Module):
         residual = x
 
         out = self.conv1(x)
-        out = self.bn1(out)
+        out = self.ln1(out)
+        # out = self.bn1(out)
         out = self.relu(out)
 
         out = self.conv2(out)
-        out = self.bn2(out)
+        out = self.ln2(out)
+        # out = self.bn2(out)
         out = self.relu(out)
 
         out = self.conv3(out)
-        out = self.bn3(out)
+        out = self.ln3(out)
+        # out = self.bn3(out)
 
         if self.downsample is not None:
             residual = self.downsample(x)
@@ -142,18 +152,19 @@ class HighResolutionModule(nn.Module):
                 nn.Conv2d(self.num_inchannels[branch_index],
                           num_channels[branch_index] * block.expansion,
                           kernel_size=1, stride=stride, bias=False),
-                BatchNorm2d(num_channels[branch_index] * block.expansion,
-                            momentum=BN_MOMENTUM),
+                nn.LayerNorm([num_channels[branch_index] * block.expansion, 8 * (2** (3 - branch_index)), 8 * (2** (3 - branch_index))], elementwise_affine=False)
+                # BatchNorm2d(num_channels[branch_index] * block.expansion,
+                #             momentum=BN_MOMENTUM),
             )
 
         layers = []
         layers.append(block(self.num_inchannels[branch_index],
-                            num_channels[branch_index], stride, downsample))
+                            num_channels[branch_index], branch_index, stride, downsample))
         self.num_inchannels[branch_index] = \
             num_channels[branch_index] * block.expansion
         for i in range(1, num_blocks[branch_index]):
             layers.append(block(self.num_inchannels[branch_index],
-                                num_channels[branch_index]))
+                                num_channels[branch_index], branch_index))
 
         return nn.Sequential(*layers)
 
@@ -184,7 +195,10 @@ class HighResolutionModule(nn.Module):
                                   1,
                                   0,
                                   bias=False),
-                        BatchNorm2d(num_inchannels[i], momentum=BN_MOMENTUM)
+                        # nn.LayerNorm([num_inchannels[i], 8 * (2** (2 - i)),
+                        #               8 * (2** (2 - i))], elementwise_affine=False)
+
+                        # BatchNorm2d(num_inchannels[i], momentum=BN_MOMENTUM)
                         ))
                 elif j == i:
                     fuse_layer.append(None)
@@ -197,8 +211,10 @@ class HighResolutionModule(nn.Module):
                                 nn.Conv2d(num_inchannels[j],
                                           num_outchannels_conv3x3,
                                           3, 2, 1, bias=False),
-                                BatchNorm2d(num_outchannels_conv3x3,
-                                            momentum=BN_MOMENTUM)
+                                # nn.LayerNorm([num_inchannels[i], 8 * (2** (2 - i)),
+                                #               8 * (2** (2 - i))], elementwise_affine=False)
+                                # BatchNorm2d(num_outchannels_conv3x3,
+                                #             momentum=BN_MOMENTUM)
                                             ))
                         else:
                             num_outchannels_conv3x3 = num_inchannels[j]
@@ -206,8 +222,10 @@ class HighResolutionModule(nn.Module):
                                 nn.Conv2d(num_inchannels[j],
                                           num_outchannels_conv3x3,
                                           3, 2, 1, bias=False),
-                                BatchNorm2d(num_outchannels_conv3x3,
-                                            momentum=BN_MOMENTUM),
+                                # nn.LayerNorm([num_inchannels[j], 8 * (2** (3 - j)),
+                                #               8 * (2** (3 - j))], elementwise_affine=False),
+                                # BatchNorm2d(num_outchannels_conv3x3,
+                                #             momentum=BN_MOMENTUM),
                                 nn.ReLU(inplace=relu_inplace)))
                     fuse_layer.append(nn.Sequential(*conv3x3s))
             fuse_layers.append(nn.ModuleList(fuse_layer))
@@ -260,17 +278,19 @@ class HRNetSeg(nn.Module):
         # stem net
         self.conv1 = nn.Conv2d(1, 64, kernel_size=3, stride=2, padding=1,
                                bias=False)
-        self.bn1 = BatchNorm2d(64, momentum=BN_MOMENTUM)
+        self.ln1 = nn.LayerNorm([64,128,128],elementwise_affine=False)
+        # self.bn1 = BatchNorm2d(64, momentum=BN_MOMENTUM)
         self.conv2 = nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1,
                                bias=False)
-        self.bn2 = BatchNorm2d(64, momentum=BN_MOMENTUM)
+        self.ln2 = nn.LayerNorm([64, 64, 64], elementwise_affine=False)
+        # self.bn2 = BatchNorm2d(64, momentum=BN_MOMENTUM)
         self.relu = nn.ReLU(inplace=relu_inplace)
 
         self.stage1_cfg = HRNetSeg_config.STAGE1()
         num_channels = self.stage1_cfg.NUM_CHANNELS[0]
         block = blocks_dict[self.stage1_cfg.BLOCK]
         num_blocks = self.stage1_cfg.NUM_BLOCKS[0]
-        self.layer1 = self._make_layer(block, 64, num_channels, num_blocks)
+        self.layer1 = self._make_layer(block, 64, num_channels,0 , num_blocks)
         stage1_out_channel = block.expansion * num_channels
 
         self.stage2_cfg = HRNetSeg_config.STAGE2()
@@ -312,7 +332,8 @@ class HRNetSeg(nn.Module):
                 kernel_size=1,
                 stride=1,
                 padding=0),
-            BatchNorm2d(last_inp_channels, momentum=BN_MOMENTUM),
+            nn.LayerNorm([last_inp_channels, 64, 64], elementwise_affine=False),
+            # BatchNorm2d(last_inp_channels, momentum=BN_MOMENTUM),
             nn.ReLU(inplace=relu_inplace),
             nn.Conv2d(
                 in_channels=last_inp_channels,
@@ -338,8 +359,10 @@ class HRNetSeg(nn.Module):
                                   1,
                                   1,
                                   bias=False),
-                        BatchNorm2d(
-                            num_channels_cur_layer[i], momentum=BN_MOMENTUM),
+                        nn.LayerNorm([num_channels_cur_layer[i], 8 * (2** (3 - i)),
+                                      8 * (2** (3 - i))], elementwise_affine=False),
+                        # BatchNorm2d(
+                        #     num_channels_cur_layer[i], momentum=BN_MOMENTUM),
                         nn.ReLU(inplace=relu_inplace)))
                 else:
                     transition_layers.append(None)
@@ -352,27 +375,29 @@ class HRNetSeg(nn.Module):
                     conv3x3s.append(nn.Sequential(
                         nn.Conv2d(
                             inchannels, outchannels, 3, 2, 1, bias=False),
-                        BatchNorm2d(outchannels, momentum=BN_MOMENTUM),
+                        nn.LayerNorm([num_channels_cur_layer[i], 8 * (2** (3 - i)),
+                                      8 * (2** (3 - i))], elementwise_affine=False),
+                        # BatchNorm2d(outchannels, momentum=BN_MOMENTUM),
                         nn.ReLU(inplace=relu_inplace)
                         ))
                 transition_layers.append(nn.Sequential(*conv3x3s))
 
         return nn.ModuleList(transition_layers)
 
-    def _make_layer(self, block, inplanes, planes, blocks, stride=1):
+    def _make_layer(self, block, inplanes, planes, size, blocks, stride=1):
         downsample = None
         if stride != 1 or inplanes != planes * block.expansion:
             downsample = nn.Sequential(
                 nn.Conv2d(inplanes, planes * block.expansion,
                           kernel_size=1, stride=stride, bias=False),
-                BatchNorm2d(planes * block.expansion, momentum=BN_MOMENTUM),
+                # BatchNorm2d(planes * block.expansion, momentum=BN_MOMENTUM),
             )
 
         layers = []
-        layers.append(block(inplanes, planes, stride, downsample))
+        layers.append(block(inplanes, planes, size, stride, downsample))
         inplanes = planes * block.expansion
         for i in range(1, blocks):
-            layers.append(block(inplanes, planes))
+            layers.append(block(inplanes, planes, size))
 
         return nn.Sequential(*layers)
 
@@ -407,10 +432,12 @@ class HRNetSeg(nn.Module):
 
     def forward(self, x):
         x = self.conv1(x)
-        x = self.bn1(x)
+        x = self.ln1(x)
+        # x = self.bn1(x)
         x = self.relu(x)
         x = self.conv2(x)
-        x = self.bn2(x)
+        x = self.ln2(x)
+        # x = self.bn2(x)
         x = self.relu(x)
         x = self.layer1(x)
 
@@ -457,53 +484,6 @@ class HRNetSeg(nn.Module):
         return x
         
 
-    #
-    #
-    #
-    #
-    # def forward(self,x):
-    #     # 2d分割逻辑
-    #
-    #     # x是一张切片
-    #     return x
-
-
-# class RNNSeg(nn.Module):
-#     def __init__(self,num_feat):
-#         super(RNNSeg, self).__init__()
-#         self.num_feat=num_feat
-#         self.hrnet_seg=HRNetSeg(num_feat,)
-#         self.up = nn.Sequential(
-#             nn.Conv2d(num_feat, num_feat * 4, 3, 1, 1),
-#             nn.PixelShuffle(2),
-#             nn.Conv2d(num_feat, num_feat * 4, 3, 1, 1),
-#             nn.PixelShuffle(2)
-#         )
-#         self.relu = nn.ReLU(inplace=True)
-#         self.conv = nn.Conv2d(num_feat, num_feat, 3, 1, 1)
-#         self.last = nn.Conv2d(num_feat, out_feat, 3, 1, 1)
-#         self.softmax = nn.Softmax(dim=1)
-#     def forward(self,x):
-#         # x是一系列切片
-#         b,n,_,h,w=x.shape
-#         # x:[b,n,1,h,w]
-#         # 假定2d分割的特征通道数为d
-#         hidden_state=x.zeros_like(b,self.num_feat,h,w)
-#         outputs=[]
-#         for i in range(n):
-#             out=torch.cat([hidden_state,x[:,i,:,:,:]],dim=1)
-#             out=self.hrnet_seg(out)
-#             outputs.append(out)
-#             hidden_state=out
-#         real_outputs=[]
-#         for out in outputs:
-#             real_out=self.up(out)
-#             real_out = self.conv(self.relu(real_out))
-#             real_out = self.last(self.relu(real_out))
-#             real_out = self.softmax(real_out)
-#             real_outputs.append(real_out)
-#         pass
-#
 class OnlyHRNetSeg(nn.Module):
     def __init__(self, config, in_feat=18, out_feat=1):
         super(OnlyHRNetSeg, self).__init__()
@@ -513,11 +493,13 @@ class OnlyHRNetSeg(nn.Module):
         self.up=nn.Sequential(
             nn.ConvTranspose2d(in_feat, in_feat, kernel_size=2, stride=2),
             nn.Conv2d(in_feat,in_feat, 3, 1, 1),
-            BatchNorm2d(in_feat, momentum=BN_MOMENTUM),
+            nn.LayerNorm([in_feat,128,128],elementwise_affine=False),
+            # BatchNorm2d(in_feat, momentum=BN_MOMENTUM),
             nn.ReLU(inplace=False),
             nn.ConvTranspose2d(in_feat, in_feat, kernel_size=2, stride=2),
             nn.Conv2d(in_feat,in_feat, 3, 1, 1),
-            BatchNorm2d(in_feat, momentum=BN_MOMENTUM),
+            nn.LayerNorm([in_feat, 256, 256], elementwise_affine=False),
+            # BatchNorm2d(in_feat, momentum=BN_MOMENTUM),
             nn.ReLU(inplace=False)
         )
         
@@ -525,9 +507,11 @@ class OnlyHRNetSeg(nn.Module):
         #self.sigmoid=nn.Sigmoid()
         self.relu=nn.ReLU(inplace=False)
         self.conv1=nn.Conv2d(in_feat, in_feat, 3, 1, 1)
-        self.bn1 = BatchNorm2d(in_feat, momentum=BN_MOMENTUM)
+        self.ln1 = nn.LayerNorm([in_feat, 256, 256], elementwise_affine=False)
+        # self.bn1 = BatchNorm2d(in_feat, momentum=BN_MOMENTUM)
         self.conv2=nn.Conv2d(in_feat, in_feat, 3, 1, 1)
-        self.bn2 = BatchNorm2d(in_feat, momentum=BN_MOMENTUM)
+        self.ln2 = nn.LayerNorm([in_feat, 256, 256], elementwise_affine=False)
+        # self.bn2 = BatchNorm2d(in_feat, momentum=BN_MOMENTUM)
         self.last=nn.Conv2d(in_feat, out_feat, 3, 1, 1)
         #self.softmax=nn.Softmax(dim=1)
     def forward(self,x):
@@ -541,10 +525,12 @@ class OnlyHRNetSeg(nn.Module):
         out=self.hrnet_seg(input)
         out=self.up(out)
         out=self.conv1(out)
-        out=self.bn1(out)
+        out=self.ln1(out)
+        # out=self.bn1(out)
         out=self.relu(out)
         out=self.conv2(out)
-        out=self.bn2(out)
+        out=self.ln2(out)
+        # out=self.bn2(out)
         out=self.relu(out)
         out=self.last(out)
         
@@ -578,6 +564,7 @@ def get_seg_model(cfg, **kwargs):
     #model.init_weights(cfg.PRETRAINED)
 
     return model
+
 
 
 def main():

@@ -166,13 +166,19 @@ def train():
     # from models.twoD_rnn.config import HRNet48
     # model = Hrnet_3d(HRNet48).to(device)
 
-    from models.twoD_rnn.OnlyHRNet import get_seg_model
-    from models.twoD_rnn.config import HRNet8
-    model = get_seg_model(HRNet8,in_feat=HRNet8.DATASET.NUM_CLASSES).to(device)
-
-    # from models.twoD_rnn.RNN_HRNet2 import RNNSeg
+    # from models.twoD_rnn.OnlyHRNet import get_seg_model
     # from models.twoD_rnn.config import HRNet8
-    # model = RNNSeg(HRNet8,num_feat=HRNet8.DATASET.NUM_CLASSES).to(device)
+    # model = get_seg_model(HRNet8,in_feat=HRNet8.DATASET.NUM_CLASSES).to(device)
+
+    # from models.twoD_rnn.HRNetln2 import RNNSeg
+    # # from models.twoD_rnn.HRNetln import get_seg_model
+    # from models.twoD_rnn.config import HRNet8
+    # # model = get_seg_model(HRNet8, in_feat=HRNet8.DATASET.NUM_CLASSES).to(device)
+    # model = RNNSeg(HRNet8, num_feat=HRNet8.DATASET.NUM_CLASSES).to(device)
+
+    from models.twoD_rnn.RNN_HRNet2 import RNNSeg
+    from models.twoD_rnn.config import HRNet8
+    model = RNNSeg(HRNet8,num_feat=HRNet8.DATASET.NUM_CLASSES).to(device)
 
     # from models.twoD_rnn.HRNet_doubleRNN import RNNSeg
     # from models.twoD_rnn.config import HRNet8
