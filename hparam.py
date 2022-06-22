@@ -46,12 +46,12 @@ class hparams:
 
     source_test_dir = 'test/image'
     label_test_dir = 'test/label'
-    model_test_dir = 'logs/hrnetrnn83'
+    model_test_dir = 'logs/hrnetrnn3+81'
     latest_checkpoint_file = 'checkpoint_latest.pt'
 
 
 
-    output_dir_test = 'results/your_program_name'
+    output_dir_test = 'results/83'
 
 
 

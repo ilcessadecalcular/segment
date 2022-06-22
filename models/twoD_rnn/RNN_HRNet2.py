@@ -469,7 +469,7 @@ class RNNSeg(nn.Module):
         self.forward_resblocks = ResidualBlocksWithInputConv(
             num_feat*2, num_feat, num_blocks)
         self.fusion = nn.Conv2d(
-            num_feat * 2, num_feat, 1, 1, 0, bias=True)
+            num_feat * 3, num_feat, 1, 1, 0, bias=True)
         self.up = nn.Sequential(
             nn.ConvTranspose2d(num_feat,num_feat,kernel_size=2,stride=2),
             nn.Conv2d(num_feat,num_feat,3,1,1),
@@ -535,7 +535,7 @@ class RNNSeg(nn.Module):
             feat_prop = self.forward_resblocks(feat_prop)
 
             # upsampling given the backward and forward features
-            out = torch.cat([outputs[i], feat_prop], dim=1)
+            out = torch.cat([outputs[i], feat_prop,output_curr], dim=1)
             out = self.relu(self.fusion(out))
             mid_output.append(out)
         fianl_out = torch.stack(mid_output,dim=1)
