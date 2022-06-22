@@ -168,7 +168,7 @@ class MedData_test(torch.utils.data.Dataset):
         sd = img_input.std()
         znorm_img_input = (img_input - mn) / sd
 
-        return patient,znorm_img_input,spacing,origin,direction,x,y,h,w
+        return patient,img_input,spacing,origin,direction,x,y,h,w
 
     def read_file(self,path):
         reader = sitk.ImageSeriesReader()
